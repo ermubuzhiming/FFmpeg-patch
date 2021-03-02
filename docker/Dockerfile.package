@@ -36,7 +36,7 @@ RUN  wget ${NASM_REPO} && \
 # Build YASM
 ARG YASM_VER=1.3.0
 ARG YASM_REPO=https://www.tortall.net/projects/yasm/releases/yasm-${YASM_VER}.tar.gz
-RUN  wget -O - ${YASM_REPO} | tar xz && \AXC                
+RUN  wget -O - ${YASM_REPO} | tar xz && \               
      cd yasm-${YASM_VER} && \
      sed -i "s/) ytasm.*/)/" Makefile.in && \
      ./configure --prefix="/usr" --libdir=/usr/lib/x86_64-linux-gnu && \
@@ -217,7 +217,7 @@ RUN wget -O - ${LIBDRM_REPO} | tar xz && \
 
 
 # Build libva
-ARG LIBVA_VER=2.10.0
+ARG LIBVA_VER=2.9.0
 ARG LIBVA_REPO=https://github.com/intel/libva/archive/${LIBVA_VER}.tar.gz
 
 RUN apt-get remove libva*
@@ -233,7 +233,7 @@ RUN wget -O - ${LIBVA_REPO} | tar xz && \
 
 
 # Build libva-utils
-ARG LIBVA_UTILS_VER=2.10.0
+ARG LIBVA_UTILS_VER=2.9.1
 ARG LIBVA_UTILS_REPO=https://github.com/intel/libva-utils/archive/${LIBVA_UTILS_VER}.tar.gz
 
 RUN wget -O - ${LIBVA_UTILS_REPO} | tar xz; \
@@ -262,20 +262,20 @@ RUN wget -O - ${MEDIA_DRIVER_REPO} | tar xz && mv media-driver-${MEDIA_DRIVER_VE
 
 
 # Build Intel(R) Media SDK
-ARG MSDK_VER=20.3.0
-ARG MSDK_REPO=https://github.comntel-Media-SDK/MediaSDK/archive/${MSDK_VER}.tar.gz
+ARG MSDK_VER=intel-mediasdk-20.3.0
+ARG MSDK_REPO=https://github.com/Intel-Media-SDK/MediaSDK/archive/${MSDK_VER}.tar.gz
 
 RUN wget -O - ${MSDK_REPO} | tar xz && mv MediaSDK-${MSDK_VER} MediaSDK && \
     mkdir -p MediaSDK/build && \
     cd MediaSDK/build && \
-    cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_INCLUDEDIR=include -DBUILD_SAMPLES=OFF -DENABLE_OPENCL=OFF -Wno-dev .. && \
+    cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_INCLUDEDIR=include/mfx -DBUILD_SAMPLES=OFF -DENABLE_OPENCL=OFF -Wno-dev .. && \
     make -j8 && \
     make install DESTDIR=/home/build && \
     rm -rf /home/build/usr/samples && \
     rm -rf /home/build/usr/plugins && \
     make install;
 
-#install OpenCL
+#install OpenCL 20.39.17972
 
 RUN mkdir neo
 
@@ -284,15 +284,17 @@ RUN cd neo && wget https://github.com/intel/intel-graphics-compiler/releases/dow
 RUN cd neo && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.5064/intel-igc-opencl_1.0.5064_amd64.deb
 RUN cd neo && wget https://github.com/intel/compute-runtime/releases/download/20.39.17972/intel-opencl_20.39.17972_amd64.deb
 # ly:github Official Installation Tutorials has but lgz not 
-#wget https://github.com/intel/compute-runtime/releases/download/20.39.17972/intel-ocloc_20.39.17972_amd64.deb
-#wget https://github.com/intel/compute-runtime/releases/download/20.39.17972/intel-level-zero-gpu_1.0.17972_amd64.deb
+RUN cd neo && wget https://github.com/intel/compute-runtime/releases/download/20.39.17972/intel-ocloc_20.39.17972_amd64.deb
+RUN cd neo && wget https://github.com/intel/compute-runtime/releases/download/20.39.17972/intel-level-zero-gpu_1.0.17972_amd64.deb
 
 RUN cd neo && \
     dpkg -i *.deb && \
     dpkg-deb -x intel-gmmlib_20.2.5_amd64.deb /home/build/ && \
     dpkg-deb -x intel-igc-core_1.0.5064_amd64.deb /home/build/ && \
     dpkg-deb -x intel-igc-opencl_1.0.5064_amd64.deb /home/build/ && \
-    dpkg-deb -x intel-opencl_20.39.17972_amd64.deb /home/build/
+    dpkg-deb -x intel-opencl_20.39.17972_amd64.deb /home/build/ && \
+	dpkg-deb -x intel-ocloc_20.39.17972_amd64.deb /home/build/ && \
+	dpkg-deb -x intel-level-zero-gpu_1.0.17972_amd64.deb /home/build/
 
 # ARGS to download specific versions of openvino, uncomment the one to download
 #R3
@@ -427,7 +429,8 @@ RUN wget ${OPENCV_REPO} && \
 ENV CPATH=$CPATH:/usr/local/include/opencv4/
 
 # Fetch FFmpeg source
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y -q --no-install-recommends libass-dev libfreetype6-dev libvdpau-dev libsdl2-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev zlib1g-dev libssl-dev ssh-client
+ENV IE_PATH=/opt/intel/openvino/deployment_tools/inference_engine
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y -q --no-install-recommends libass-dev libfreetype6-dev libvdpau-dev libsdl2-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev zlib1g-dev libssl-dev ssh-client python3-dev
 
 ADD patch /root/patch
 ARG FFMPEG_VER=n4.2
@@ -456,11 +459,12 @@ RUN wget -O - ${FFMPEG_REPO} | tar xz && mv FFmpeg-${FFMPEG_VER} FFmpeg
 
 RUN cd /home/FFmpeg && \
     find ${FFMPEG_MA_PATH}/patches -type f -name '*.patch' -print0 | sort -z | xargs -t -0 -n 1 patch -p1 -i && \
-    cp /root/patch/opencv.pc /usr/local/lib/pkgconfig/ && \
+    cp /root/patch/opencv.pc /usr/lib/pkgconfig/ && \
     cp /root/patch/cvdef.h /usr/local/include/opencv4/opencv2/core/cvdef.h && \
-    ./configure --prefix="/usr" --libdir=/usr/lib/x86_64-linux-gnu --extra-libs="-lpthread -lm" --enable-shared --enable-gpl --enable-libass --enable-libfreetype  --enable-openssl --enable-nonfree --enable-libdrm --enable-libmfx --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages --enable-libfdk-aac --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libvpx --enable-libx264 --enable-libx265 --enable-libaom --enable-librdkafka --enable-libjson_c --enable-libinference_engine_c_wrapper --enable-libopencv && \
+    ./configure --prefix="/usr" --extra-cflags="-I$IE_PATH/include" --extra-ldflags="-L$IE_PATH/lib/intel64" --libdir=/usr/lib/x86_64-linux-gnu --extra-libs="-lpthread -lm" --enable-shared --enable-gpl --enable-libass --enable-libfreetype  --enable-openssl --enable-nonfree --enable-libdrm --enable-libmfx --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages --enable-libfdk-aac --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libvpx --enable-libx264 --enable-libx265 --enable-libaom --enable-librdkafka --enable-libjson_c --enable-libinference_engine_c_api --enable-libopencv --enable-python3 && \
     make -j8 && \
-    make install DESTDIR="/home/build"
+    make install DESTDIR="/home/build" && \
+    cp -rf python /home/build/python
 
 # Clean up after build
 RUN rm -rf /home/build/usr/include && \
@@ -475,8 +479,9 @@ LABEL Vendor="Intel Corporation"
 WORKDIR /home
 
 # Prerequisites
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y -q --no-install-recommends libxv1 libxcb-shm0 libxcb-shape0 libxcb-xfixes0 libsdl2-2.0-0 libasound2 libvdpau1 libnuma1 libass-dev libssl1.0.0 libdrm2 libboost-all-dev libusb-1.0-0-dev libjson-c-dev build-essential autoconf automake libtool kmod libelf-dev lsb-release; \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y -q --no-install-recommends libxv1 libxcb-shm0 libxcb-shape0 libxcb-xfixes0 libsdl2-2.0-0 libasound2 libvdpau1 libnuma1 libass-dev libssl1.0.0 libdrm2 libboost-all-dev libusb-1.0-0-dev libjson-c-dev python3-dev python3-pip ; \
     rm -rf /var/lib/apt/lists/*;
+RUN python3 -m pip install Pillow numpy
 
 # Install
 COPY *_hddl.sh /usr/local/bin/
@@ -489,5 +494,6 @@ ENV IE_PLUGINS_PATH=/opt/intel/openvino/deployment_tools/inference_engine/lib/in
 ENV HDDL_INSTALL_DIR=/opt/intel/openvino/deployment_tools/inference_engine/external/hddl
 ENV InferenceEngine_DIR="/opt/intel/openvino/deployment_tools/inference_engine/share"
 ENV OpenCV_DIR=/opt/intel/openvino/opencv/share/OpenCV
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/intel/openvino/deployment_tools/ngraph/lib:/usr/local/lib:/opt/intel/opencl:$HDDL_INSTALL_DIR/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/gna/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/mkltiny_lnx/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/omp/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/tbb/lib:/opt/intel/openvino/openvx/lib:$IE_PLUGINS_PATH
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/opt/intel/openvino/deployment_tools/ngraph/lib:/opt/intel/opencl:$HDDL_INSTALL_DIR/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/gna/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/mkltiny_lnx/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/tbb/lib:/opt/intel/openvino/openvx/lib:$IE_PLUGINS_PATH
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/intel/openvino/deployment_tools/ngraph/lib:/usr/local/lib:/opt/intel/opencl:$HDDL_INSTALL_DIR/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/gna/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/mkltiny_lnx/lib:/opt/intel/openvino/deployment_tools/inference_engine/external/tbb/lib:/opt/intel/openvino/openvx/lib:$IE_PLUGINS_PATH
 
